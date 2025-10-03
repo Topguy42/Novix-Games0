@@ -1,4 +1,3 @@
-import { createBareServer } from "@tomphttp/bare-server-node";
 import express from "express";
 import { createServer } from "node:http";
 import { epoxyPath } from "@mercuryworkshop/epoxy-transport";
@@ -7,6 +6,7 @@ import { baremuxPath } from "@mercuryworkshop/bare-mux/node";
 import { scramjetPath } from "@mercuryworkshop/scramjet/path";
 import { server as wisp } from "@mercuryworkshop/wisp-js/server";
 import { uvPath } from "@titaniumnetwork-dev/ultraviolet";
+import { createBareServer } from "@tomphttp/bare-server-node";
 import path, { join } from "node:path";
 import { hostname } from "node:os";
 import { fileURLToPath } from "node:url";

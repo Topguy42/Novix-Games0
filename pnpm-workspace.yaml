@@ -2,4 +2,5 @@ onlyBuiltDependencies:
   - '@mercuryworkshop/scramjet'
   - bufferutil
   - node
+  - sharp
   - utf-8-validate

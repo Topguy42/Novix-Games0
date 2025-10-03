@@ -1194,33 +1194,7 @@
       toggleMenu();
     }
     function fixProxy() {
-      navigator.serviceWorker.getRegistrations().then(registrations => {
-        // Unregister all service workers
-        const unregisterPromises = registrations.map(reg =>
-          reg.unregister().then(success => {
-            console.log(`Service Worker unregistered: ${success}`);
-          })
-        );
-
-        // After all are unregistered, delete the database
-        Promise.all(unregisterPromises).then(() => {
-          const dbName = '$scramjet';
-          const request = indexedDB.deleteDatabase(dbName);
-
-          request.onsuccess = () => {
-            console.log(`Deleted IndexedDB: ${dbName}`);
-          };
-          request.onerror = () => {
-            console.error(`Failed to delete IndexedDB: ${dbName}`);
-          };
-          request.onblocked = () => {
-            console.warn(`Delete blocked for IndexedDB: ${dbName}`);
-          };
-
-          localStorage.setItem('bare-mux-path', '/baremux/worker.js');
-          // window.location.reload();
-        });
-      });
+      window.top.location.href = "/fix-proxy.html";
     }
     class Search {
       constructor(scramjet, store) {
