@@ -390,7 +390,7 @@ function updateAddressBar() {
       activeTab.frame.frame.src = "/newpage.html";
     }
     if (url.startsWith("https://www.youtube.com") || url.startsWith("youtube.com") || url === "www.youtube.com") {
-      activeTab.frame.frame.src = "/static/youtube-embed.html#" + url;
+      activeTab.frame.frame.src = "/static/google-embed.html#" + url;
     }
     if (url.startsWith("https://discord.com") || url.startsWith("discord.com") || url === "discord.com") {
       activeTab.frame.frame.src = "/static/embed.html#" + url;
