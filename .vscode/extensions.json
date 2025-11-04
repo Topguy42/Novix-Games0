@@ -6,5 +6,6 @@
     "eamodio.gitlens",
     "webhint.vscode-webhint",
     "stylelint.vscode-stylelint"
-  ]
+  ],
+  "unwantedRecommendations": ["ms-vscode.vscode-typescript-tslint-plugin", "hookyqr.beautify"]
 }
