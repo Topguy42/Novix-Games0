@@ -25,10 +25,10 @@ export default {
         ignoreProperties: ['backdrop-filter', 'mask-image', 'scrollbar-width']
       }
     ],
-    overrides: [
+    'overrides': [
       {
-        files: ["**/*.html"],
-        customSyntax: ["postcss-html", { scripts: false }]
+        files: ['**/*.html'],
+        customSyntax: ['postcss-html', { scripts: false }]
       }
     ]
   }

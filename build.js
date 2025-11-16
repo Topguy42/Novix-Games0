@@ -46,7 +46,6 @@ function safeJsonStringify(obj) {
   });
 }
 
-
 /**
  * JSON array writer for large datasets.
  */
@@ -658,7 +657,6 @@ function withConcurrencyLimit(items, limit, fn, flushCallback, options = {}) {
   });
 }
 
-
 /**
  * Compute priority value based on commit count and maximum commits.
  *
@@ -890,9 +888,7 @@ async function main() {
       }
 
       if ((i + 1) % 10 === 0 || i === batches - 1) {
-        console.log(
-          `Processed ${processed} entries / ${crawled.length} files (${Math.round((processed / Math.max(1, crawled.length)) * 100)}%)...`
-        );
+        console.log(`Processed ${processed} entries / ${crawled.length} files (${Math.round((processed / Math.max(1, crawled.length)) * 100)}%)...`);
       }
     }
   } catch (err) {
@@ -960,4 +956,3 @@ main().catch((err) => {
   console.error(err instanceof Error ? err.message : String(err));
   process.exit(1);
 });
-
