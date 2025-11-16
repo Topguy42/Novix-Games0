@@ -19,6 +19,9 @@ Designed for restricted enviornments like schools or workplaces.
 
 Our website is host to over 300k users!
 
+Links- You can visit [https://petezahgames.com](https://petezahgames.com), and
+you can get more links in our [Discord Server](https://discord.gg/unrestricted)
+
 ## Deploying
 
 > [!WARNING] You **can not** host this proxy example locally via static web
@@ -58,7 +61,7 @@ If you would like to use one of the following buttons to deploy
 Our website is at petezahgames.com if you would like to see it
 
 > [!IMPORTANT] You can get more links in our
-> [Discord Server](https://discord.gg/cYjHFDguxS)
+> [Discord Server](https://discord.gg/unrestricted)
 
 ## Docs
 

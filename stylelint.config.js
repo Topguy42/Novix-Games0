@@ -1,5 +1,5 @@
 export default {
-  extends: ['stylelint-config-standard'],
+  extends: ['stylelint-config-standard, "stylelint-config-prettier'],
   plugins: ['stylelint-order'],
   rules: {
     'no-duplicate-selectors': true,
@@ -28,11 +28,7 @@ export default {
     overrides: [
       {
         files: ["**/*.html"],
-        customSyntax: "postcss-html"      // parse inline <style> and style=""
-      },
-      {
-        files: ["**/*.{js,jsx,ts,tsx}"],
-        customSyntax: "postcss-jsx"      // parse styled-components and emotion css-in-js
+        customSyntax: ["postcss-html", { scripts: false }]
       }
     ]
   }

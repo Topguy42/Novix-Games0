@@ -11,6 +11,17 @@ import path from 'path';
 import sharp from 'sharp';
 import { fileURLToPath } from 'url';
 
+/**
+ * @typedef {Object} SitemapEntry
+ * @property {string} loc
+ * @property {string} lastmod
+ * @property {string} filePath
+ * @property {string} ext
+ * @property {number} commitCount
+ * @property {number} [priority]
+ * @property {string} [changefreq]
+ */
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projdir = __dirname;
@@ -26,20 +37,20 @@ const projdir = __dirname;
 function safeJsonStringify(obj) {
   return JSON.stringify(obj, (key, value) => {
     if (typeof value === 'string') {
-      // Only keep printable ASCII characters (space through tilde)
       return value.replace(/[^\x20-\x7E]/g, '');
     }
     if (DEBUG === true) {
-      console.log(`Safely strigified value: ${value}`);
+      console.log(`Safely stringified value: ${value}`);
     }
     return value;
   });
 }
 
+
 /**
  * JSON array writer for large datasets.
  */
-class jsonarraywriter {
+class JsonArrayWriter {
   /**
    *
    * @param {string} filePath
@@ -51,15 +62,16 @@ class jsonarraywriter {
     this.stream.write('[\n');
 
     // Handle stream errors
-    this.stream.on('error', ( /** @type {Error} */ err) => {
-      console.error(`Error writing to ${filePath}:`, err);
+    this.stream.on('error', (err) => {
+      console.error(`Error writing to ${filePath}:`, err instanceof Error ? err.message : String(err));
       this.hasError = true;
     });
   }
 
   /**
+   * Write an object to the JSON array.
    *
-   * @param {string} obj
+   * @param {unknown} obj - Object to write
    * @returns {Promise<void>}
    */
   async write(obj) {
@@ -70,9 +82,9 @@ class jsonarraywriter {
     return new Promise((resolve, reject) => {
       const data = this.count > 0 ? ',\n  ' : '  ';
       this.stream.write(data + safeJsonStringify(obj), 'utf8', (err) => {
-        if ( /** @type {Error} */ err) {
+        if (err) {
           this.hasError = true;
-          reject( /** @type {Error} */ err);
+          reject(err);
         } else {
           this.count++;
           resolve();
@@ -82,6 +94,7 @@ class jsonarraywriter {
   }
 
   /**
+   * Close the stream and return the count of written entries.
    *
    * @returns {Promise<number>}
    */
@@ -91,19 +104,15 @@ class jsonarraywriter {
     }
 
     return new Promise((resolve, reject) => {
-      this.stream.end('\n]\n', 'utf8',
-        /**
-        * @param {Error | null} err
-        */
-        (0.err) => {
+      this.stream.end('\n]\n', 'utf8', (err) => {
         if (err) {
           reject(err);
         } else {
           resolve(this.count);
         }
       });
-  });
-}
+    });
+  }
 }
 
 // Move remaining top-level constants and configuration outside the class
@@ -132,7 +141,7 @@ const Submodules = ['scramjet', 'ultraviolet'];
 // --- Build commands ---
 /** @type {Record<string, string>} */
 const buildCommands = {
-  //scramjet: "CI=true pnpm install && PATH='$HOME/.cargo/bin:$PATH' npm run rewriter:build && npm run build:all",;
+  //scramjet: "CI=true pnpm install && PATH='$HOME/.cargo/bin:$PATH' npm run rewriter:build && npm run build:all",
   ultraviolet: 'CI=true npm install && npm run build'
 };
 const YELLOW = '\x1b[33m';
@@ -226,8 +235,8 @@ function checkWSL() {
       throw new Error('WSL is installed but no distros found.');
     }
     console.log(`WSL distros detected: ${distros.trim()}`);
-  } catch ( /** @type {Error} */ err) {
-    throw new Error('WSL is not installed or inaccessible. Details: ' + err.message);
+  } catch (err) {
+    throw new Error('WSL is not installed or inaccessible. Details: ' + (err instanceof Error ? err.message : String(err)));
   }
 }
 
@@ -357,6 +366,14 @@ async function convertRasterFile(inputPath, baseDir, outBase) {
   }
 }
 
+/**
+ * Copy vector file to output directory preserving structure.
+ *
+ * @param {string} inputPath - Path to the input vector file
+ * @param {string} baseDir - Base directory for relative path calculation
+ * @param {string} outBase - Output base directory
+ * @returns {Promise<void>}
+ */
 async function copyVectorOriginal(inputPath, baseDir, outBase) {
   const rel = path.relative(baseDir, inputPath);
   const dest = path.join(outBase, rel);
@@ -365,6 +382,14 @@ async function copyVectorOriginal(inputPath, baseDir, outBase) {
   console.log(`Copied vector: ${path.relative(outBase, dest)}`);
 }
 
+/**
+ * Rasterize vector file to multiple formats as fallbacks.
+ *
+ * @param {string} inputPath - Path to the input vector file
+ * @param {string} baseDir - Base directory for relative path calculation
+ * @param {string} outBase - Output base directory
+ * @returns {Promise<void>}
+ */
 async function rasterizeVectorFallbacks(inputPath, baseDir, outBase) {
   const ext = path.extname(inputPath).toLowerCase();
   const rel = path.relative(baseDir, inputPath);
@@ -380,6 +405,14 @@ async function rasterizeVectorFallbacks(inputPath, baseDir, outBase) {
     console.log(`${rel} → ${path.relative(outBase, outPath)}`);
   }
 }
+
+/**
+ * Recursively walk directory tree and call handler for each file.
+ *
+ * @param {string} dir - Starting directory path
+ * @param {(file: string) => Promise<void>} handler - Async function to call for each file
+ * @returns {Promise<void>}
+ */
 async function walk(dir, handler) {
   const stack = [dir];
   while (stack.length) {
@@ -397,7 +430,7 @@ async function walk(dir, handler) {
 }
 
 async function processInputImages() {
-  logSection('Processing raster images (/inputimages → /public/optimg)');
+  logSection('Processing raster images (/inputimages \u2192 /public/optimg)');
   const exists = await fse.pathExists(INPUT_IMAGES);
   if (!exists) {
     console.warn('inputimages directory not found; skipping raster pipeline.');
@@ -411,7 +444,7 @@ async function processInputImages() {
 }
 
 async function processInputVectors() {
-  logSection('Processing vectors (/inputvectors → /public/outvect)');
+  logSection('Processing vectors (/inputvectors \u2192 /public/outvect)');
   const exists = await fse.pathExists(INPUT_VECTORS);
   if (!exists) {
     console.warn('inputvectors directory not found; skipping vector pipeline.');
@@ -443,8 +476,8 @@ try {
   const ignoreContent = await fse.readFile(ignorePath, 'utf8');
   sitemapIgnore = ignore().add(ignoreContent);
   console.log('Loaded .sitemapignore rules');
-} catch ( /** @type {Error} */ err) {
-  console.warn('No .sitemapignore file found or failed to read:', err.message);
+} catch (err) {
+  console.warn('No .sitemapignore file found or failed to read:', err instanceof Error ? err.message : String(err));
   sitemapIgnore = ignore();
 }
 
@@ -466,8 +499,8 @@ async function crawlAsync(dir, baseUrl = '') {
 
     // Process directories and files in parallel
     const limit = pLimit(os.cpus().length * 2);
-    const processPromises = entries.map((entry) =>
-      limit(async () => {
+    const processPromises = entries.map((entry) => {
+      return limit(async () => {
         const full = path.join(dir, entry.name);
 
         try {
@@ -499,25 +532,31 @@ async function crawlAsync(dir, baseUrl = '') {
               ext,
               commitCount: 0
             });
-          } catch (/** @type {Error} */ statErr) {
-            console.warn(`Warning: Could not stat file ${full}: ${statErr.message}`);
+          } catch (statErr) {
+            console.warn(`Warning: Could not stat file ${full}: ${statErr instanceof Error ? statErr.message : String(statErr)}`);
           }
-        } catch (/** @type {Error} */ err) {
-          console.warn(`Warning: Error processing ${full}: ${err.message}`);
+        } catch (err) {
+          console.warn(`Warning: Error processing ${full}: ${err instanceof Error ? err.message : String(err)}`);
         }
-      })
-    );
+      });
+    });
 
     await Promise.all(processPromises);
     return results;
-  } catch (/** @type {Error} */ err) {
-    console.error(`Error crawling directory ${dir}: ${err.message}`);
+  } catch (err) {
+    console.error(`Error crawling directory ${dir}: ${err instanceof Error ? err.message : String(err)}`);
     return [];
   }
 }
 const workdir = __dirname;
 const gitCache = new Map();
 
+/**
+ * Get git metadata for a file path with caching.
+ *
+ * @param {string} filePath - Path to the file
+ * @returns {Promise<{commitCount: number, lastmod: string | null}>}
+ */
 async function getFileGitData(filePath) {
   const cacheKey = filePath;
   if (gitCache.has(cacheKey)) {
@@ -540,9 +579,9 @@ async function getFileGitData(filePath) {
     };
     gitCache.set(cacheKey, result);
     return result;
-  } catch (/** @type {Error} */ err) {
+  } catch (err) {
     if (DEBUG) {
-      console.warn(`Git data fetch failed for ${filePath}: ${err.message}`);
+      console.warn(`Git data fetch failed for ${filePath}: ${err instanceof Error ? err.message : String(err)}`);
     }
     const result = { commitCount: 0, lastmod: null };
     gitCache.set(cacheKey, result);
@@ -551,34 +590,37 @@ async function getFileGitData(filePath) {
 }
 
 /**
- * Run tasks with concurrency limit.
+ * Run tasks with concurrency limit and periodic flush.
  *
- * @template T
+ * @template T,R
  * @param {T[]} items
  * @param {number} limit
- * @param {(item: T, index: number) => Promise<unknown>} fn
- * @param {(results: unknown[]) => Promise<void>} [flushCallback]
- * @returns {Promise<unknown[]>}
+ * @param {(item: T, index: number) => Promise<R>} fn
+ * @param {(results: R[]) => Promise<void>} [flushCallback]
+ * @param {{ maxMemoryUsage?: number; flushInterval?: number }} [options]
+ * @returns {Promise<R[]>}
  */
-function withConcurrencyLimit(items, limit, fn, flushCallback) {
+function withConcurrencyLimit(items, limit, fn, flushCallback, options = {}) {
+  /** @type {R[]} */
   const results = [];
   let i = 0;
   let activeWorkers = 0;
-  const maxMemoryUsage = options.maxMemoryUsage || 0.8;
-  const flushInterval = options.flushInterval || 100;
+  const maxMemoryUsage = options.maxMemoryUsage ?? 0.8;
+  const flushInterval = options.flushInterval ?? 100;
   let lastFlushIndex = 0;
+
   if (DEBUG) {
     console.log(`withConcurrencyLimit: limit=${limit}, maxMemoryUsage=${maxMemoryUsage}, flushInterval=${flushInterval}`);
   }
+
   async function runWorker() {
     while (i < items.length) {
       const memUsage = process.memoryUsage().heapUsed / process.memoryUsage().heapTotal;
 
-      // Flush if memory usage is high or enough items have accumulated
       if ((memUsage > maxMemoryUsage || i - lastFlushIndex >= flushInterval) && flushCallback && results.length > 0) {
         console.warn(`Flushing ${results.length} items at index ${i} (mem: ${Math.round(memUsage * 100)}%)`);
         await flushCallback(results.filter(Boolean));
-        results.length = 0; // clear flushed results
+        results.length = 0;
         lastFlushIndex = i;
       }
 
@@ -590,8 +632,8 @@ function withConcurrencyLimit(items, limit, fn, flushCallback) {
         if (DEBUG) {
           console.log(`Worker started. Active: ${activeWorkers}`);
         }
-      } catch (/** @type {Error} */ err) {
-        console.warn(`Worker error at index ${idx}:`, err.message);
+      } catch (err) {
+        console.warn(`Worker error at index ${idx}:`, err instanceof Error ? err.message : String(err));
       } finally {
         activeWorkers--;
         if (DEBUG) {
@@ -604,15 +646,26 @@ function withConcurrencyLimit(items, limit, fn, flushCallback) {
   const workers = new Array(Math.min(limit, items.length)).fill(null).map(() => runWorker());
 
   return Promise.all(workers).then(async () => {
-    // Final flush after all workers complete
     if (flushCallback && results.length > 0) {
       console.warn(`Final flush of ${results.length} items`);
       await flushCallback(results.filter(Boolean));
     }
-    return results;
+    // If a flushCallback was provided the results were already written to disk
+    // by the flushCallback. In that mode we return an empty array so the caller
+    // does not duplicate writes. If no flushCallback was provided, return the
+    // collected results for the caller to process.
+    return flushCallback ? [] : results;
   });
 }
 
+
+/**
+ * Compute priority value based on commit count and maximum commits.
+ *
+ * @param {number} commitCount - Number of commits for this file
+ * @param {number} maxCommits - Maximum commit count across all files
+ * @returns {number} Priority value between 0.1 and 1.0
+ */
 function computePriority(commitCount, maxCommits) {
   if (maxCommits === 0) return 0.5;
   const normalized = commitCount / maxCommits;
@@ -687,7 +740,7 @@ async function main() {
       console.log(`Loaded ${Object.keys(previousCache).length} cached git entries`);
     }
   } catch (err) {
-    console.warn(err.message);
+    console.warn(err instanceof Error ? err.message : String(err));
     console.log('No previous git cache found, starting fresh');
   }
 
@@ -707,37 +760,49 @@ async function main() {
   const writer = new JsonArrayWriter(sitemapBasePath);
 
   // Group files by directory for more efficient processing
+  /** @type {Map<string, SitemapEntry[]>} */
   const filesByDir = new Map();
   for (const entry of crawled) {
     const dir = path.dirname(entry.filePath);
-    if (!filesByDir.has(dir)) {
-      filesByDir.set(dir, []);
+    /** @type {SitemapEntry[] | undefined} */
+    let arr = filesByDir.get(dir);
+    if (!arr) {
+      filesByDir.set(dir, [entry]);
+    } else {
+      arr.push(entry);
     }
-    filesByDir.get(dir).push(entry);
   }
 
   console.log(`Grouped ${crawled.length} files into ${filesByDir.size} directories`);
 
-  // Process directories in parallel for better git data caching
+  // Process directories in parallel for better git data caching.
+  // Optimization: only compute git metadata for directories that contain HTML files
+  // (other assets like images/videos don't need git metadata and are much faster to process).
+  /** @type {[string, SitemapEntry[]][]} */
+  const dirEntriesArray = Array.from(filesByDir.entries());
   const dirEntries = await Promise.all(
-    Array.from(filesByDir.entries()).map(async ([dir, entries]) => {
+    dirEntriesArray.map(async ([dir, entries]) => {
+      // Determine if any entry in this directory requires git info (HTML pages)
+      const needsGit = entries.some((e) => e.ext === HTML_EXT);
+      if (!needsGit) {
+        // No HTML files here — skip git lookups entirely for these entries
+        return entries.map((entry) => ({ entry, gitData: null }));
+      }
+
       try {
-        // Get git data for directory once
+        // Get git data for directory once to use as a fallback for files inside it
         const dirGitData = await getFileGitData(dir);
-        return entries.map((entry) => ({
-          entry,
-          gitData: dirGitData // Use directory git data as fallback
-        }));
-      } catch ( /** @type {Error} */ err) {
-        console.warn(`Warning: Failed to get git data for directory ${dir} with error: ${err.message}`);
+        return entries.map((entry) => ({ entry, gitData: dirGitData }));
+      } catch (err) {
+        console.warn(`Warning: Failed to get git data for directory ${dir} with error: ${err instanceof Error ? err.message : String(err)}`);
         return entries.map((entry) => ({ entry, gitData: null }));
       }
     })
   );
 
   // Process all entries in larger batches
-  const batchSize = 200; // Much larger batch size
-  const maxConcurrency = Math.min(200, os.cpus().length * 8); // Scale with CPU cores
+  const batchSize = 200; // Larger batch size for throughput
+  const maxConcurrency = Math.min(200, Math.max(4, os.cpus().length * 4)); // Scale with CPU cores but conservative
   let processed = 0;
   let maxCommits = 0;
 
@@ -756,21 +821,34 @@ async function main() {
         maxConcurrency,
         async ({ entry, gitData: dirGitData }) => {
           try {
-            let gitData = dirGitData;
-            if (!gitData || !gitData.lastmod || gitData.commitCount === 0) {
-              gitData = await getFileGitData(entry.filePath);
+            // Only fetch git metadata for HTML pages; images/videos do not need it
+            if (entry.ext === HTML_EXT) {
+              let gitData = dirGitData;
+              // If directory-level data is missing/insufficient, fetch per-file
+              if (!gitData || !gitData.lastmod) {
+                gitData = await getFileGitData(entry.filePath);
+              }
+
+              const commits = gitData?.commitCount || 0;
+              maxCommits = Math.max(maxCommits, commits);
+
+              return {
+                loc: entry.loc,
+                lastmod: gitData?.lastmod || entry.lastmod,
+                ext: entry.ext,
+                commitCount: commits
+              };
             }
 
-            maxCommits = Math.max(maxCommits, gitData.commitCount || 0);
-
+            // For non-HTML files (images, videos, etc.) skip git and use filesystem mtime
             return {
               loc: entry.loc,
-              lastmod: gitData.lastmod || entry.lastmod,
+              lastmod: entry.lastmod,
               ext: entry.ext,
-              commitCount: gitData.commitCount || 0
+              commitCount: 0
             };
-          } catch ( /** @type {Error} */ err) {
-            console.warn(`Warning: Failed to process entry ${entry.filePath}: ${err.message}`);
+          } catch (err) {
+            console.warn(`Warning: Failed to process entry ${entry.filePath}: ${err instanceof Error ? err.message : String(err)}`);
             return {
               loc: entry.loc,
               lastmod: entry.lastmod,
@@ -782,7 +860,6 @@ async function main() {
         async (partialResults) => {
           // Flush partial results to disk
           for (const entry of partialResults.filter(Boolean)) {
-            /** @type {partialResults} */
             try {
               await writer.write({
                 ...entry,
@@ -791,12 +868,13 @@ async function main() {
               });
               processed++;
             } catch (writeErr) {
-              console.error(`Error writing entry ${entry.loc}: ${writeErr.message}`);
+              console.error(`Error writing entry ${entry.loc}: ${writeErr instanceof Error ? writeErr.message : String(writeErr)}`);
             }
           }
           partialResults.length = 0; // clear memory
-        }
-
+        },
+        { maxMemoryUsage: 0.8, flushInterval: 200 }
+      );
       // Final flush after batch
       for (const entry of enriched.filter(Boolean)) {
         try {
@@ -806,17 +884,19 @@ async function main() {
             changefreq: computeChangefreq(entry.lastmod)
           });
           processed++;
-        } catch (/** @type {Error} */ writeErr) {
-          console.error(`Error writing entry ${entry.loc}: ${writeErr.message}`);
+        } catch (writeErr) {
+          console.error(`Error writing entry ${entry.loc}: ${writeErr instanceof Error ? writeErr.message : String(writeErr)}`);
         }
       }
 
       if ((i + 1) % 10 === 0 || i === batches - 1) {
-        console.log(`Processed ${processed}/${crawled.length} files (${Math.round((processed / crawled.length) * 100)}%)...`);
+        console.log(
+          `Processed ${processed} entries / ${crawled.length} files (${Math.round((processed / Math.max(1, crawled.length)) * 100)}%)...`
+        );
       }
     }
-  } catch ( /** @type {Error} */ err) {
-    console.error('Error during sitemap generation:', err);
+  } catch (err) {
+    console.error('Error during sitemap generation:', err instanceof Error ? err.message : String(err));
     throw err;
   }
 
@@ -828,8 +908,8 @@ async function main() {
     const cacheObject = Object.fromEntries(gitCache);
     await fse.writeJson(sitemapCachePath, cacheObject, { spaces: 2 });
     console.log(`Saved git cache with ${gitCache.size} entries`);
-  } catch ( /** @type {Error} */ err) {
-    console.warn('Failed to save git cache:', err.message);
+  } catch (err) {
+    console.warn('Failed to save git cache:', err instanceof Error ? err.message : String(err));
   }
 
   // Validate generated sitemap
@@ -861,11 +941,10 @@ async function main() {
     } else {
       console.log('Sitemap validation successful');
     }
-  } catch ( /** @type {Error} */ err) {
-    console.error('Sitemap validation failed:', err.message);
+  } catch (err) {
+    console.error('Sitemap validation failed:', err instanceof Error ? err.message : String(err));
     throw err;
   }
-
   logSection(`Done in ${formatDuration(Date.now() - start)}`);
 
   // Return success status
@@ -877,8 +956,8 @@ async function main() {
   };
 }
 
-main().catch(( /** @type {Error} */ err) => {
-  console.error( /** @type {Error} */ err);
+main().catch((err) => {
+  console.error(err instanceof Error ? err.message : String(err));
   process.exit(1);
 });
 
