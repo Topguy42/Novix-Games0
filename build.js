@@ -101,15 +101,20 @@ class JsonArrayWriter {
     if (this.hasError) {
       throw new Error('Stream is in error state');
     }
-
     return new Promise((resolve, reject) => {
-      this.stream.end('\n]\n', 'utf8', (err) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(this.count);
+      this.stream.end('\n]\n', 'utf8',
+        /**
+         * @param {Error | null | undefined} err
+         * @returns {void}
+         */
+        (err) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(this.count);
+          }
         }
-      });
+      );
     });
   }
 }
@@ -124,12 +129,14 @@ if (args.env === 'debug') {
 }
 
 const SKIP_SUBMODULES = args['skip-submodules'] || process.env.SKIP_SUBMODULES === '1' || false;
+const NO_CACHE = args['no-cache'] || process.env.NO_CACHE === '1' || false;
 const USAGE = `build.js [options]
 
 Options:
   --help, -h              Show this help message
   --skip-submodules       Skip building external submodules (env SKIP_SUBMODULES=1)
   --keep-submodules       Do not refresh submodules (env KEEP_SUBMODULES=1)
+  --no-cache              Do not load or save git metadata cache (env NO_CACHE=1)
   --env=NAME              Set environment mode (e.g., --env=debug)
 `;
 
@@ -213,7 +220,7 @@ async function ensureSubmodules() {
     await new Promise((resolve, reject) => {
       const p = spawn('git', ['submodule', 'update', '--init', '--recursive'], { cwd: projdir, stdio: 'inherit' });
       p.on('close', (code) => {
-        if (code === 0) resolve();
+        if (code === 0) resolve(undefined);
         else reject(new Error('git submodule update failed with code ' + code));
       });
     });
@@ -311,7 +318,7 @@ async function buildSubmodules() {
 
       command.on('close', (code) => {
         if (code === 0) {
-          resolve();
+          resolve(undefined);
         } else {
           reject(new Error(`Build failed for ${name} with exit code ${code}`));
         }
@@ -416,6 +423,8 @@ async function walk(dir, handler) {
   const stack = [dir];
   while (stack.length) {
     const current = stack.pop();
+    if (!current) continue; // guard against undefined to satisfy TS
+    /** @type {import('fs').Dirent[]} */
     const entries = await fse.readdir(current, { withFileTypes: true });
     for (const entry of entries) {
       const full = path.join(current, entry.name);
@@ -728,18 +737,22 @@ async function main() {
   const sitemapBasePath = path.join(sitemapDir, '.sitemap-base.json');
   const sitemapCachePath = path.join(sitemapDir, '.sitemap-cache.json');
 
-  // Load previous git cache if available
-  try {
-    const previousCache = await fse.readJson(sitemapCachePath);
-    if (previousCache && typeof previousCache === 'object') {
-      for (const [key, value] of Object.entries(previousCache)) {
-        gitCache.set(key, value);
+  // Load previous git cache if available (unless --no-cache is set)
+  if (!NO_CACHE) {
+    try {
+      const previousCache = await fse.readJson(sitemapCachePath);
+      if (previousCache && typeof previousCache === 'object') {
+        for (const [key, value] of Object.entries(previousCache)) {
+          gitCache.set(key, value);
+        }
+        console.log(`Loaded ${Object.keys(previousCache).length} cached git entries`);
       }
-      console.log(`Loaded ${Object.keys(previousCache).length} cached git entries`);
+    } catch (err) {
+      console.warn(err instanceof Error ? err.message : String(err));
+      console.log('No previous git cache found, starting fresh');
     }
-  } catch (err) {
-    console.warn(err instanceof Error ? err.message : String(err));
-    console.log('No previous git cache found, starting fresh');
+  } else {
+    console.log('Skipping git cache load due to --no-cache flag');
   }
 
   // Crawl files asynchronously
@@ -774,16 +787,16 @@ async function main() {
   console.log(`Grouped ${crawled.length} files into ${filesByDir.size} directories`);
 
   // Process directories in parallel for better git data caching.
-  // Optimization: only compute git metadata for directories that contain HTML files
-  // (other assets like images/videos don't need git metadata and are much faster to process).
+  // Optimization: only compute git metadata for directories that contain HTML or video files
+  // (images don't need git metadata and are much faster to process).
   /** @type {[string, SitemapEntry[]][]} */
   const dirEntriesArray = Array.from(filesByDir.entries());
   const dirEntries = await Promise.all(
     dirEntriesArray.map(async ([dir, entries]) => {
-      // Determine if any entry in this directory requires git info (HTML pages)
-      const needsGit = entries.some((e) => e.ext === HTML_EXT);
+      // Determine if any entry in this directory requires git info (HTML pages or videos)
+      const needsGit = entries.some((e) => e.ext === HTML_EXT || VIDEO_EXTENSIONS.includes(e.ext));
       if (!needsGit) {
-        // No HTML files here — skip git lookups entirely for these entries
+        // No HTML or video files here — skip git lookups entirely for these entries
         return entries.map((entry) => ({ entry, gitData: null }));
       }
 
@@ -819,8 +832,10 @@ async function main() {
         maxConcurrency,
         async ({ entry, gitData: dirGitData }) => {
           try {
-            // Only fetch git metadata for HTML pages; images/videos do not need it
-            if (entry.ext === HTML_EXT) {
+            // Only fetch git metadata for HTML pages and videos; images do not need it
+            const needsGitMetadata = entry.ext === HTML_EXT || VIDEO_EXTENSIONS.includes(entry.ext);
+
+            if (needsGitMetadata) {
               let gitData = dirGitData;
               // If directory-level data is missing/insufficient, fetch per-file
               if (!gitData || !gitData.lastmod) {
@@ -838,7 +853,7 @@ async function main() {
               };
             }
 
-            // For non-HTML files (images, videos, etc.) skip git and use filesystem mtime
+            // For images and other assets skip git and use filesystem mtime
             return {
               loc: entry.loc,
               lastmod: entry.lastmod,
@@ -899,13 +914,17 @@ async function main() {
   const finalCount = await writer.end();
   console.log('Sitemap base built with', finalCount, 'entries');
 
-  // Save git cache for future runs
-  try {
-    const cacheObject = Object.fromEntries(gitCache);
-    await fse.writeJson(sitemapCachePath, cacheObject, { spaces: 2 });
-    console.log(`Saved git cache with ${gitCache.size} entries`);
-  } catch (err) {
-    console.warn('Failed to save git cache:', err instanceof Error ? err.message : String(err));
+  // Save git cache for future runs (unless --no-cache is set)
+  if (!NO_CACHE) {
+    try {
+      const cacheObject = Object.fromEntries(gitCache);
+      await fse.writeJson(sitemapCachePath, cacheObject, { spaces: 2 });
+      console.log(`Saved git cache with ${gitCache.size} entries`);
+    } catch (err) {
+      console.warn('Failed to save git cache:', err instanceof Error ? err.message : String(err));
+    }
+  } else {
+    console.log('Skipping git cache save due to --no-cache flag');
   }
 
   // Validate generated sitemap
