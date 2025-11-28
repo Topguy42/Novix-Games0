@@ -1,0 +1,21 @@
+[Unit]
+Description=HE.net IPv6 Tunnel
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+
+# Setup tunnel
+ExecStart=/usr/local/bin/setup-he-tunnel.sh
+
+# Cleanup on stop
+ExecStop=/sbin/ip tunnel del he-ipv6
+
+# Restart on failure
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
