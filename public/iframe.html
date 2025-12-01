@@ -133,7 +133,6 @@ iframe {
         <div class="controls">
             <i style="margin-left: 15px;" class="fas fa-expand icon" onclick="toggleFullscreen()"></i>
             <i class="fas fa-sync icon" onclick="refreshIframe()"></i>
-            <i class="fa-solid fa-comment icon" id="whysofeinious-button"></i>
             <i class="fa-solid fa-pager icon" id="openIframeSource"></i>
         </div>
     </div>
@@ -194,21 +193,6 @@ iframe {
             const iframe = document.getElementById('myIframe');
             iframe.src = iframe.src;
         }
-
-        document.getElementById('whysofeinious-button').addEventListener('click', function() {
-            const script = document.createElement('script');
-            script.src = 'https://cdn.jsdelivr.net/npm/@widgetbot/crate@3';
-            script.async = true;
-            script.defer = true;
-            document.body.appendChild(script);
-
-            script.onload = function() {
-                new Crate({
-                    server: '1337108365591187640', 
-                    channel: '1345454451904745673' 
-                });
-            };
-        });
 
         document.getElementById('openIframeSource').addEventListener('click', function() {
             var iframeSrc = document.getElementById('myIframe').src;
