@@ -14,7 +14,6 @@ import rateLimit from 'express-rate-limit';
 import session from 'express-session';
 import fs from 'fs';
 import { createProxyMiddleware } from 'http-proxy-middleware';
-import { parse as parseJSONC } from 'jsonc-parser';
 import NodeCache from 'node-cache';
 import crypto from 'node:crypto';
 import { createServer } from 'node:http';
@@ -27,9 +26,9 @@ import { getLikesHandler, likeHandler } from './server/api/likes.js';
 import { signinHandler } from './server/api/signin.js';
 import { signupHandler } from './server/api/signup.js';
 import db from './server/db.js';
+import parseConfig from './server/parseconfig.js';
 
-const configRaw = fs.readFileSync('./config.jsonc', 'utf-8');
-const config = parseJSONC(configRaw);
+const config = parseConfig('./config.jsonc');
 const legalRemoved = config.legalRemoved || [];
 const cache = new NodeCache({ stdTTL: 86400 });
 let SESSION_SECRET;
@@ -558,10 +557,6 @@ app.post('/api/change-password', async (req, res) => {
   }
 });
 
-app.use((req, res) => {
-  return res.status(404).sendFile(join(__dirname, publicPath, '404.html'));
-});
-
 function parseCookies(header) {
   if (!header) return {};
   return header.split(';').reduce((acc, cookie) => {
@@ -613,11 +608,13 @@ const handleUpgradeVerification = (req, socket, next) => {
   console.log(`WebSocket Upgrade Attempt: URL=${req.url}, Verified=${verified}, IsBrowser=${isWsBrowser}, Cookies=${req.headers.cookie || 'none'}`);
 
   // Allow all WISP endpoints without verification
-  if (req.url.startsWith("/wisp/") ||
-    req.url.startsWith("/api/wisp-premium/") ||
-    req.url.startsWith("/api/alt-wisp-1/") ||
-    req.url.startsWith("/api/alt-wisp-2/") ||
-    req.url.startsWith("/api/alt-wisp-3/")) {
+  if (
+    req.url.startsWith('/wisp/') ||
+    req.url.startsWith('/api/wisp-premium/') ||
+    req.url.startsWith('/api/alt-wisp-1/') ||
+    req.url.startsWith('/api/alt-wisp-2/') ||
+    req.url.startsWith('/api/alt-wisp-3/')
+  ) {
     return next();
   }
 
@@ -639,7 +636,7 @@ const server = createServer((req, res) => {
       barePremium.routeRequest(req, res);
     });
   } else {
-    app.handle(req, res);
+    app(req, res);
   }
 });
 
@@ -648,91 +645,29 @@ server.on('upgrade', (req, socket, head) => {
     handleUpgradeVerification(req, socket, () => bare.routeUpgrade(req, socket, head));
   } else if (barePremium.shouldRoute(req)) {
     handleUpgradeVerification(req, socket, () => barePremium.routeUpgrade(req, socket, head));
-  } else if (req.url?.startsWith("/wisp/") ||
-    req.url?.startsWith("/api/wisp-premium/") ||
-    req.url?.startsWith("/api/alt-wisp-1/") ||
-    req.url?.startsWith("/api/alt-wisp-2/") ||
-    req.url?.startsWith("/api/alt-wisp-3/")) {
+  } else if (
+    req.url?.startsWith('/wisp/') ||
+    req.url?.startsWith('/api/wisp-premium/') ||
+    req.url?.startsWith('/api/alt-wisp-1/') ||
+    req.url?.startsWith('/api/alt-wisp-2/') ||
+    req.url?.startsWith('/api/alt-wisp-3/')
+  ) {
     // Skip verification for WISP endpoints
-    if (req.url.startsWith("/api/wisp-premium/")) req.url = req.url.replace("/api/wisp-premium/", "/wisp/");
-    if (req.url.startsWith("/api/alt-wisp-1/")) req.url = req.url.replace("/api/alt-wisp-1/", "/wisp/");
-    if (req.url.startsWith("/api/alt-wisp-2/")) req.url = req.url.replace("/api/alt-wisp-2/", "/wisp/");
-    if (req.url.startsWith("/api/alt-wisp-3/")) req.url = req.url.replace("/api/alt-wisp-3/", "/wisp/");
+    if (req.url.startsWith('/api/wisp-premium/')) req.url = req.url.replace('/api/wisp-premium/', '/wisp/');
+    if (req.url.startsWith('/api/alt-wisp-1/')) req.url = req.url.replace('/api/alt-wisp-1/', '/wisp/');
+    if (req.url.startsWith('/api/alt-wisp-2/')) req.url = req.url.replace('/api/alt-wisp-2/', '/wisp/');
+    if (req.url.startsWith('/api/alt-wisp-3/')) req.url = req.url.replace('/api/alt-wisp-3/', '/wisp/');
     wisp.routeRequest(req, socket, head);
   } else {
     socket.end();
   }
 });
-const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg'];
-const VIDEO_EXTENSIONS = ['.mp4', '.webm', '.mov'];
 
 // Load cache at startup
 const urls = JSON.parse(fs.readFileSync('.sitemap-base.json', 'utf8'));
 cache.set('urls', urls);
 
-// --- Priority & changefreq ---
-function computePriority(commitCount, maxCommits) {
-  if (maxCommits === 0) return 0.5;
-  const normalized = commitCount / maxCommits;
-  return Math.max(0.1, Math.min(1.0, normalized));
-}
-function computeChangefreq(lastmod) {
-  const last = new Date(lastmod);
-  const days = (Date.now() - last.getTime()) / (1000 * 60 * 60 * 24);
-  if (days <= 7) return 'daily';
-  if (days <= 30) return 'weekly';
-  if (days <= 180) return 'monthly';
-  return 'yearly';
-}
-
-// --- XML generator ---
-function generateXml(domain, urls) {
-  const maxCommits = urls.reduce((max, u) => Math.max(max, u.commitCount), 0);
-  let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
-  xml += `<?xml-stylesheet type="text/xsl" href="/sitemap.xsl"?>\n`;
-  xml += `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"\n`;
-  xml += `        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"\n`;
-  xml += `        xmlns:video="http://www.google.com/schemas/sitemap-video/1.1">\n`;
-  urls.forEach((u) => {
-    const priority = computePriority(u.commitCount, maxCommits).toFixed(2);
-    const changefreq = computeChangefreq(u.lastmod);
-    xml += `  <url>\n`;
-    xml += `    <loc>${domain}${u.loc}</loc>\n`;
-    xml += `    <lastmod>${u.lastmod}</lastmod>\n`;
-    xml += `    <changefreq>${changefreq}</changefreq>\n`;
-    xml += `    <priority>${priority}</priority>\n`;
-    if (IMAGE_EXTENSIONS.includes(u.ext)) {
-      xml += `    <image:image><image:loc>${domain}${u.loc}</image:loc></image:image>\n`;
-    }
-    if (VIDEO_EXTENSIONS.includes(u.ext)) {
-      xml += `    <video:video>\n`;
-      xml += `      <video:content_loc>${domain}${u.loc}</video:content_loc>\n`;
-      xml += `      <video:title>${path.basename(u.loc)}</video:title>\n`;
-      xml += `      <video:description>Video file ${path.basename(u.loc)}</video:description>\n`;
-      xml += `    </video:video>\n`;
-    }
-    xml += `  </url>\n`;
-  });
-  xml += `</urlset>`;
-  return xml;
-}
-
-// --- JSON generator ---
-function generateJson(domain, urls) {
-  const maxCommits = urls.reduce((max, u) => Math.max(max, u.commitCount), 0);
-  return urls.map((u) => ({
-    loc: domain + u.loc,
-    lastmod: u.lastmod,
-    changefreq: computeChangefreq(u.lastmod),
-    priority: computePriority(u.commitCount, maxCommits),
-    type: IMAGE_EXTENSIONS.includes(u.ext) ? 'image' : VIDEO_EXTENSIONS.includes(u.ext) ? 'video' : 'page'
-  }));
-}
-
-// --- TXT generator ---
-function generateTxt(domain, urls) {
-  return urls.map((u) => domain + u.loc).join('\n');
-}
+import { generateJson, generateTxt, generateXml } from './server/helpers/sitemap.js';
 
 // --- Routes ---
 // public folder static assets already served by middleware in applyCommonMiddleware()
@@ -756,14 +691,19 @@ app.get('/sitemap.txt', (req, res) => {
 const port = parseInt(config.PORT || process.env.PORT || '3000');
 server.keepAliveTimeout = 5000;
 server.headersTimeout = 6000;
-
-server.listen({ port }, () => {
-  const address = server.address();
-  console.log(`Listening on:`);
-  console.log(`\thttp://localhost:${address.port}`);
-  console.log(`\thttp://${hostname()}:${address.port}`);
-  console.log(`\thttp://${address.family === 'IPv6' ? `[${address.address}]` : address.address}:${address.port}`);
+app.use((req, res) => {
+  return res.status(404).sendFile(join(__dirname, publicPath, '404.html'));
 });
+function startServer() {
+  server.listen({ port }, () => {
+    const address = server.address();
+    console.log(`Listening on:`);
+    console.log(`\thttp://localhost:${address.port}`);
+    console.log(`\thttp://${hostname()}:${address.port}`);
+    console.log(`\thttp://${address.family === 'IPv6' ? `[${address.address}]` : address.address}:${address.port}`);
+  });
+}
+startServer();
 
 process.on('SIGINT', () => shutdown('INT'));
 process.on('SIGTERM', () => shutdown('TERM'));
@@ -779,3 +719,4 @@ function shutdown(signal) {
   });
 }
 
+export { app, server, startServer };
