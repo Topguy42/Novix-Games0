@@ -1,11 +1,11 @@
 body {
-	background-color: #3d0a0a;
-	color: #ffdddd;
+	background-color: #3d0a0a !important;
+	color: #ffdddd !important;
 }
 
 body.theme-default {
-	background-color: #3d0a0a;
-	color: #ffdddd;
+	background-color: #3d0a0a !important;
+	color: #ffdddd !important;
 	--primary-gradient: linear-gradient(90deg, #8e3c3c, #a54f4f);
 	--hover-gradient: linear-gradient(90deg, #5f2a2a, #8e3c3c);
 }
@@ -95,5 +95,6 @@ input[type="file"]::file-selector-button:hover {
 
 /* Ensure background image overrides theme background color if set */
 body {
+	background-color: #3d0a0a !important;
 	transition: background-color 0.5s ease, color 0.5s ease;
 }
