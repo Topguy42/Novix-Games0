@@ -37,6 +37,11 @@ import { randomUUID } from "crypto";
 dotenv.config();
 const envFile = `.env.${process.env.NODE_ENV || 'production'}`;
 if (fs.existsSync(envFile)) { dotenv.config({ path: envFile }); }
+
+// Generate SESSION_SECRET if not provided
+if (!process.env.SESSION_SECRET) {
+  process.env.SESSION_SECRET = randomBytes(32).toString('hex');
+}
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const publicPath = "public";
