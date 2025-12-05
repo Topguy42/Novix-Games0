@@ -6,7 +6,7 @@
         align-items: flex-start;
         height: 100vh;
         margin: 0;
-        background-color: #3d0a0a;
+        background-color: #3d0a0a !important;
         color: white;
         font-family: "Poppins", sans-serif;
         padding: 20px 0;
