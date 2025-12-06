@@ -16,6 +16,7 @@ import { hostname } from "node:os";
 import { fileURLToPath } from "node:url";
 import session from "express-session";
 import dotenv from "dotenv";
+import sqlite3 from "better-sqlite3";
 import fileUpload from "express-fileupload";
 import { signupHandler } from "./server/api/signup.js";
 import { signinHandler } from "./server/api/signin.js";
