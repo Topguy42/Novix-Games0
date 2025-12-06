@@ -212,6 +212,19 @@ app.use(session({
   }
 }));
 
+// Debug session logging
+app.use((req, res, next) => {
+  const original = res.json.bind(res);
+  res.json = function(data) {
+    if (req.path === '/api/signin' || req.path === '/api/signup') {
+      console.log(`[${req.path}] Session ID: ${req.sessionID}, User in session: ${req.session?.user?.email || 'none'}`);
+      console.log(`[${req.path}] Headers being set:`, res.getHeaders());
+    }
+    return original(data);
+  };
+  next();
+});
+
 app.use(
   "/api/gn-math/covers",
   createProxyMiddleware({
