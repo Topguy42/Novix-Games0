@@ -128,7 +128,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(fileUpload());
 
-// Create SQLite session store
+// In-memory session store with persistence to SQLite
 const sessionDb = new sqlite3(path.join(__dirname, 'data', 'sessions.db'));
 sessionDb.exec(`
   CREATE TABLE IF NOT EXISTS sessions (
@@ -139,16 +139,38 @@ sessionDb.exec(`
   CREATE INDEX IF NOT EXISTS expire_idx ON sessions(expire);
 `);
 
-// Simple SQLite session store
-class SqliteSessionStore extends session.Store {
+class PersistentSessionStore extends session.Store {
+  constructor() {
+    super();
+    this.sessions = new Map();
+    this.loadAllSessions();
+  }
+
+  loadAllSessions() {
+    try {
+      const rows = sessionDb.prepare('SELECT sid, sess, expire FROM sessions WHERE expire > ?').all(Date.now());
+      rows.forEach(row => {
+        this.sessions.set(row.sid, JSON.parse(row.sess));
+      });
+      console.log(`Loaded ${rows.length} sessions from database`);
+    } catch (err) {
+      console.error('Failed to load sessions:', err);
+    }
+  }
+
   get(sid, callback) {
     try {
+      const sess = this.sessions.get(sid);
+      if (sess) {
+        return callback(null, sess);
+      }
       const row = sessionDb.prepare('SELECT sess FROM sessions WHERE sid = ? AND expire > ?').get(sid, Date.now());
       if (row) {
-        callback(null, JSON.parse(row.sess));
-      } else {
-        callback(null, null);
+        const sess = JSON.parse(row.sess);
+        this.sessions.set(sid, sess);
+        return callback(null, sess);
       }
+      callback(null, null);
     } catch (err) {
       callback(err);
     }
@@ -156,6 +178,7 @@ class SqliteSessionStore extends session.Store {
 
   set(sid, sess, callback) {
     try {
+      this.sessions.set(sid, sess);
       const expire = Date.now() + (sess.cookie?.maxAge || 7 * 24 * 60 * 60 * 1000);
       sessionDb.prepare('INSERT OR REPLACE INTO sessions (sid, sess, expire) VALUES (?, ?, ?)').run(
         sid,
@@ -170,6 +193,7 @@ class SqliteSessionStore extends session.Store {
 
   destroy(sid, callback) {
     try {
+      this.sessions.delete(sid);
       sessionDb.prepare('DELETE FROM sessions WHERE sid = ?').run(sid);
       callback(null);
     } catch (err) {
@@ -179,6 +203,7 @@ class SqliteSessionStore extends session.Store {
 
   clear(callback) {
     try {
+      this.sessions.clear();
       sessionDb.prepare('DELETE FROM sessions').run();
       callback(null);
     } catch (err) {
@@ -187,45 +212,32 @@ class SqliteSessionStore extends session.Store {
   }
 }
 
+const store = new PersistentSessionStore();
+
 // Clean up expired sessions periodically
 setInterval(() => {
   try {
     sessionDb.prepare('DELETE FROM sessions WHERE expire <= ?').run(Date.now());
+    console.log('Cleaned expired sessions');
   } catch (err) {
     console.error('Session cleanup error:', err);
   }
-}, 60 * 60 * 1000); // Every hour
-
-const store = new SqliteSessionStore();
+}, 60 * 60 * 1000);
 
 app.use(session({
   store: store,
   secret: process.env.SESSION_SECRET,
-  resave: true,
-  saveUninitialized: true,
+  resave: false,
+  saveUninitialized: false,
+  name: 'sessionid',
   cookie: {
     secure: false,
     httpOnly: true,
     sameSite: 'Lax',
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    maxAge: 7 * 24 * 60 * 60 * 1000,
     path: '/'
   }
 }));
-
-// Debug session logging
-app.use((req, res, next) => {
-  const originalEnd = res.end.bind(res);
-  res.end = function(...args) {
-    if ((req.path === '/api/signin' || req.path === '/api/signup') && req.method === 'POST') {
-      const headers = res.getHeaders();
-      console.log(`[${req.path}] Session ID: ${req.sessionID}, User in session: ${req.session?.user?.email || 'none'}`);
-      console.log(`[${req.path}] Set-Cookie header:`, headers['set-cookie']);
-      console.log(`[${req.path}] All response headers:`, headers);
-    }
-    return originalEnd.apply(res, args);
-  };
-  next();
-});
 
 app.use(
   "/api/gn-math/covers",
