@@ -16,6 +16,7 @@ import { hostname } from "node:os";
 import { fileURLToPath } from "node:url";
 import session from "express-session";
 import dotenv from "dotenv";
+import sqlite3 from "better-sqlite3";
 import fileUpload from "express-fileupload";
 import { signupHandler } from "./server/api/signup.js";
 import { signinHandler } from "./server/api/signin.js";
@@ -37,6 +38,11 @@ import { randomUUID } from "crypto";
 dotenv.config();
 const envFile = `.env.${process.env.NODE_ENV || 'production'}`;
 if (fs.existsSync(envFile)) { dotenv.config({ path: envFile }); }
+
+// Generate SESSION_SECRET if not provided
+if (!process.env.SESSION_SECRET) {
+  process.env.SESSION_SECRET = randomBytes(32).toString('hex');
+}
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const publicPath = "public";
@@ -121,15 +127,115 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(fileUpload());
+
+// In-memory session store with persistence to SQLite
+const sessionDb = new sqlite3(path.join(__dirname, 'data', 'sessions.db'));
+sessionDb.exec(`
+  CREATE TABLE IF NOT EXISTS sessions (
+    sid TEXT PRIMARY KEY,
+    sess TEXT NOT NULL,
+    expire INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS expire_idx ON sessions(expire);
+`);
+
+class PersistentSessionStore extends session.Store {
+  constructor() {
+    super();
+    this.sessions = new Map();
+    this.loadAllSessions();
+  }
+
+  loadAllSessions() {
+    try {
+      const rows = sessionDb.prepare('SELECT sid, sess, expire FROM sessions WHERE expire > ?').all(Date.now());
+      rows.forEach(row => {
+        this.sessions.set(row.sid, JSON.parse(row.sess));
+      });
+      console.log(`Loaded ${rows.length} sessions from database`);
+    } catch (err) {
+      console.error('Failed to load sessions:', err);
+    }
+  }
+
+  get(sid, callback) {
+    try {
+      const sess = this.sessions.get(sid);
+      if (sess) {
+        return callback(null, sess);
+      }
+      const row = sessionDb.prepare('SELECT sess FROM sessions WHERE sid = ? AND expire > ?').get(sid, Date.now());
+      if (row) {
+        const sess = JSON.parse(row.sess);
+        this.sessions.set(sid, sess);
+        return callback(null, sess);
+      }
+      callback(null, null);
+    } catch (err) {
+      callback(err);
+    }
+  }
+
+  set(sid, sess, callback) {
+    try {
+      this.sessions.set(sid, sess);
+      const expire = Date.now() + (sess.cookie?.maxAge || 7 * 24 * 60 * 60 * 1000);
+      sessionDb.prepare('INSERT OR REPLACE INTO sessions (sid, sess, expire) VALUES (?, ?, ?)').run(
+        sid,
+        JSON.stringify(sess),
+        expire
+      );
+      callback(null);
+    } catch (err) {
+      callback(err);
+    }
+  }
+
+  destroy(sid, callback) {
+    try {
+      this.sessions.delete(sid);
+      sessionDb.prepare('DELETE FROM sessions WHERE sid = ?').run(sid);
+      callback(null);
+    } catch (err) {
+      callback(err);
+    }
+  }
+
+  clear(callback) {
+    try {
+      this.sessions.clear();
+      sessionDb.prepare('DELETE FROM sessions').run();
+      callback(null);
+    } catch (err) {
+      callback(err);
+    }
+  }
+}
+
+const store = new PersistentSessionStore();
+
+// Clean up expired sessions periodically
+setInterval(() => {
+  try {
+    sessionDb.prepare('DELETE FROM sessions WHERE expire <= ?').run(Date.now());
+    console.log('Cleaned expired sessions');
+  } catch (err) {
+    console.error('Session cleanup error:', err);
+  }
+}, 60 * 60 * 1000);
+
 app.use(session({
+  store: store,
   secret: process.env.SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
+  name: 'sessionid',
   cookie: {
     secure: false,
     httpOnly: true,
     sameSite: 'Lax',
-    maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+    path: '/'
   }
 }));
 
@@ -251,6 +357,8 @@ app.post("/api/signout", (req, res) => {
   return res.status(200).json({ message: "Signout successful" });
 });
 app.get("/api/profile", (req, res) => {
+  console.log(`[/api/profile] Session ID: ${req.sessionID}, User in session: ${req.session?.user?.email || 'none'}`);
+  console.log(`[/api/profile] Cookies from client:`, req.cookies);
   if (!req.session.user) {
     return res.status(401).json({ error: "Unauthorized" });
   }

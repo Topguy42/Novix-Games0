@@ -5,7 +5,7 @@ import { randomUUID } from 'crypto';
 
 export async function signupHandler(req, res) {
   const { email, password, school, age } = req.body;
-  
+
   if (!email || !password) {
     return res.status(400).json({ error: 'Email and password are required' });
   }
@@ -37,29 +37,39 @@ export async function signupHandler(req, res) {
     `).run(userId, email, passwordHash, now, now, isAdmin ? 1 : 0, 1, school || null, age || null, ip);
 
     if (isFirstUser) {
-      req.session.user = {
-        id: userId,
-        email: email,
-        username: null,
-        bio: null,
-        avatar_url: null
-      };
-      req.session.save((err) => {
+      // Regenerate session for first user
+      req.session.regenerate((err) => {
         if (err) {
-          console.error('Session save error:', err);
+          console.error('Session regenerate error:', err);
           return res.status(500).json({ error: 'Internal server error' });
         }
-        res.status(201).json({
-          message: 'Admin account created and verified automatically!'
+
+        req.session.user = {
+          id: userId,
+          email: email,
+          username: null,
+          bio: null,
+          avatar_url: null
+        };
+
+        req.session.save((saveErr) => {
+          if (saveErr) {
+            console.error('Session save error:', saveErr);
+            return res.status(500).json({ error: 'Internal server error' });
+          }
+          console.log(`[SIGNUP] Admin user ${email} created, session ID: ${req.sessionID}`);
+          return res.status(201).json({
+            message: 'Admin account created and verified automatically!'
+          });
         });
       });
     } else {
-      res.status(201).json({
+      return res.status(201).json({
         message: 'Account created successfully! You can now log in.'
       });
     }
   } catch (error) {
     console.error('Signup error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 }
