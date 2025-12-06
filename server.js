@@ -201,12 +201,12 @@ const store = new SqliteSessionStore();
 app.use(session({
   store: store,
   secret: process.env.SESSION_SECRET,
-  resave: false,
+  resave: true,
   saveUninitialized: true,
   cookie: {
     secure: false,
     httpOnly: true,
-    sameSite: false,
+    sameSite: 'Strict',
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     path: '/'
   }
