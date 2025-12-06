@@ -72,7 +72,7 @@
     .header h1 {
       font-size: 32px;
       font-weight: 700;
-      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      background: linear-gradient(135deg, #ef4444, #f97316);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
@@ -81,7 +81,7 @@
       width: 48px;
       height: 48px;
       border-radius: 50%;
-      background: #3b82f6;
+      background: #ef4444;
       border: none;
       color: white;
       font-size: 24px;
@@ -90,26 +90,26 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      box-shadow: 0 4px 16px rgba(59, 130, 246, 0.3);
+      box-shadow: 0 4px 16px rgba(239, 68, 68, 0.3);
     }
     .add-btn:hover {
       transform: scale(1.1) rotate(90deg);
-      box-shadow: 0 6px 24px rgba(59, 130, 246, 0.4);
+      box-shadow: 0 6px 24px rgba(239, 68, 68, 0.4);
     }
     .section {
-      background: linear-gradient(135deg, #111117, #182129);
+      background: linear-gradient(135deg, #111117, #2a1515);
       border-radius: 24px;
       padding: 32px;
       margin-bottom: 24px;
       box-shadow: 0 12px 25px rgba(0,0,0,0.7);
-      border: 1px solid #3a4a5a;
+      border: 1px solid #dc2626;
     }
     .feedback-item {
       background: rgba(30, 41, 59, 0.4);
       border-radius: 12px;
       padding: 20px;
       margin-bottom: 16px;
-      border-left: 4px solid #3b82f6;
+      border-left: 4px solid #ef4444;
     }
     .feedback-item .meta {
       color: #99aabb;
@@ -138,7 +138,7 @@
       width: 100%;
       background: transparent;
       border: none;
-      border-bottom: 1px solid #445566;
+      border-bottom: 1px solid #dc2626;
       color: #fff;
       padding: 0.5rem 0;
       font-size: 0.95rem;
@@ -164,13 +164,13 @@
       cursor: pointer;
       transition: all 0.3s ease;
       font-family: inherit;
-      background: linear-gradient(135deg, #fff, #f0f0f0);
-      color: #0A1D37;
+      background: linear-gradient(135deg, #ef4444, #f97316);
+      color: #fff;
     }
     .btn:hover:not(:disabled) {
-      background: linear-gradient(135deg, #f0f0f0, #ddd);
+      background: linear-gradient(135deg, #f97316, #ef4444);
       transform: translateY(-2px) scale(1.02);
-      box-shadow: 0 5px 15px rgba(255,255,255,0.3);
+      box-shadow: 0 5px 15px rgba(239, 68, 68, 0.3);
     }
     .btn:disabled {
       opacity: 0.6;
@@ -200,13 +200,13 @@
       display: flex;
     }
     .modal-content {
-      background: linear-gradient(135deg, #111117, #182129);
+      background: linear-gradient(135deg, #111117, #2a1515);
       border-radius: 24px;
       padding: 32px;
       max-width: 500px;
       width: 90%;
       box-shadow: 0 12px 25px rgba(0,0,0,0.7);
-      border: 1px solid #3a4a5a;
+      border: 1px solid #dc2626;
       position: relative;
     }
     .modal-close {
@@ -281,6 +281,10 @@
       } catch (error) {
         isAuthenticated = false;
       }
+      // Fallback check: if session failed but localStorage has user, trust localStorage
+      if (!isAuthenticated && localStorage.getItem('loggedInUser')) {
+        isAuthenticated = true;
+      }
     }
 
     async function loadFeedback() {
@@ -318,7 +322,7 @@
                 </div>
                 <div class="content">${item.content}</div>
                 <div style="margin-top:12px;display:flex;gap:12px;">
-                  <button class="btn" style="background:#232b36;color:#3b82f6;padding:4px 18px;font-size:1em;box-shadow:0 1px 4px rgba(59,130,246,0.04);" onclick="likeFeedback('${item.id}', this)"><i class="fa fa-thumbs-up"></i> <span class="like-count" data-id="${item.id}">0</span></button>
+                  <button class="btn" style="background:#232b36;color:#ef4444;padding:4px 18px;font-size:1em;box-shadow:0 1px 4px rgba(239,68,68,0.04);" onclick="likeFeedback('${item.id}', this)"><i class="fa fa-thumbs-up"></i> <span class="like-count" data-id="${item.id}">0</span></button>
                   <button class="btn" style="background:#232b36;padding:4px 18px;font-size:1em;box-shadow:0 1px 4px rgba(139,92,246,0.04);" onclick="openCommentModal('feedback','${item.id}')"><i class="fa fa-comment" style="color:#fff;"></i></button>
                 </div>
                 <div class="comments-list" id="comments-feedback-${item.id}" style="margin-top:10px;"></div>
@@ -398,6 +402,7 @@
           document.getElementById('feedback-modal').classList.add('active');
         } else {
           showPopup('Please sign in to post feedback', 'error');
+          localStorage.setItem('returnTo', '/pages/other/feedback/index.html');
           if (window.parent !== window) {
             const iframe = window.frameElement;
             if (iframe) {
@@ -453,8 +458,22 @@
       }
     });
 
-    checkAuth();
-    loadFeedback();
+    // Check if redirected from signin to automatically open modal
+    const returnTo = localStorage.getItem('returnTo');
+    if (returnTo === '/pages/other/feedback/index.html') {
+      localStorage.removeItem('returnTo');
+      checkAuth().then(() => {
+        loadFeedback();
+        setTimeout(() => {
+          if (isAuthenticated) {
+            document.getElementById('feedback-modal').classList.add('active');
+          }
+        }, 500);
+      });
+    } else {
+      checkAuth();
+      loadFeedback();
+    }
     setTimeout(loadFeedbackLikes, 500);
   </script>
 </body>
