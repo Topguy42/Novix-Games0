@@ -12,6 +12,13 @@ export async function likeHandler(req, res) {
     const userId = req.session?.user?.id || req.sessionID || null;
 
     if (action === 'unlike') {
+      const existingLike = db.prepare('SELECT id FROM likes WHERE type = ? AND target_id = ? AND user_id = ?')
+        .get(type, targetId, userId);
+
+      if (!existingLike) {
+        return res.status(400).json({ error: 'You have not liked this' });
+      }
+
       db.prepare('DELETE FROM likes WHERE type = ? AND target_id = ? AND user_id = ?')
         .run(type, targetId, userId);
       res.json({ message: 'Unliked.' });
