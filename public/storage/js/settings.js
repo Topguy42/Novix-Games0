@@ -230,9 +230,9 @@ document.addEventListener("DOMContentLoaded", () => {
 		popup.document.body.style.margin = "0";
 		popup.document.body.appendChild(iframe);
 
-		// Redirect original tab to Google and clear history
+		// Redirect original tab to Google and clear history (use window.top to escape iframe)
 		setTimeout(() => {
-			window.location.replace(
+			window.top.location.replace(
 				localStorage.getItem("panicUrl") || "https://www.google.com"
 			);
 		}, 100);
@@ -307,7 +307,6 @@ document.addEventListener("DOMContentLoaded", () => {
 	if (elements.autocloakToggle) {
 		elements.autocloakToggle.addEventListener("change", () => {
 			localStorage.setItem("autocloak", elements.autocloakToggle.checked);
-			if (elements.autocloakToggle.checked) autocloak();
 			broadcastSettingsChange();
 		});
 	}
@@ -511,7 +510,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	if (
 		!inIframe &&
 		elements.autocloakToggle &&
-		elements.autocloakToggle.checked &&
+		localStorage.getItem("autocloak") === "true" &&
 		!navigator.userAgent.includes("Firefox")
 	) {
 		autocloak();
