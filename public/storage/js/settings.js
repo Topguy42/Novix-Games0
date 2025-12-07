@@ -40,9 +40,13 @@ document.addEventListener("DOMContentLoaded", () => {
 				"https://asset-cdn.schoology.com/sites/all/themes/schoology_theme/favicon.ico",
 		},
 		google: { title: "Google", favicon: "https://www.google.com/favicon.ico" },
+		petezah: {
+			title: "Novix",
+			favicon: "https://cdn.builder.io/api/v1/image/assets%2F3357cadaa74948169aaec041da572353%2F399192bd029e4646afba4d22f80c6040?format=webp&width=800",
+		},
 		novix: {
 			title: "Novix",
-			favicon: "/storage/images/logo-png-removebg-preview.png",
+			favicon: "https://cdn.builder.io/api/v1/image/assets%2F3357cadaa74948169aaec041da572353%2F399192bd029e4646afba4d22f80c6040?format=webp&width=800",
 		},
 	};
 
@@ -203,9 +207,35 @@ document.addEventListener("DOMContentLoaded", () => {
 	};
 
 	const autocloak = () => {
-		openAboutBlank();
-		window.location.href =
-			localStorage.getItem("panicUrl") || "https://classroom.google.com";
+		// Open a new tab with about:blank and inject the site into it
+		const popup = window.open("about:blank", "_blank");
+		if (!popup || popup.closed) {
+			alert("Please allow popups for about:blank to work.");
+			return;
+		}
+
+		// Set up the popup with site title and favicon
+		popup.document.title = localStorage.getItem("siteTitle") || "Home";
+		const favicon = popup.document.createElement("link");
+		favicon.rel = "icon";
+		favicon.href =
+			localStorage.getItem("siteLogo") ||
+			"/storage/images/logo-png-removebg-preview.png";
+		popup.document.head.appendChild(favicon);
+
+		// Inject the site into the popup
+		const iframe = popup.document.createElement("iframe");
+		iframe.src = "/index.html";
+		iframe.style.cssText = "width: 100vw; height: 100vh; border: none;";
+		popup.document.body.style.margin = "0";
+		popup.document.body.appendChild(iframe);
+
+		// Redirect original tab to Google and clear history (use window.top to escape iframe)
+		setTimeout(() => {
+			window.top.location.replace(
+				localStorage.getItem("panicUrl") || "https://www.google.com"
+			);
+		}, 100);
 	};
 
 	const exportData = () => {
@@ -277,7 +307,6 @@ document.addEventListener("DOMContentLoaded", () => {
 	if (elements.autocloakToggle) {
 		elements.autocloakToggle.addEventListener("change", () => {
 			localStorage.setItem("autocloak", elements.autocloakToggle.checked);
-			if (elements.autocloakToggle.checked) autocloak();
 			broadcastSettingsChange();
 		});
 	}
@@ -481,7 +510,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	if (
 		!inIframe &&
 		elements.autocloakToggle &&
-		elements.autocloakToggle.checked &&
+		localStorage.getItem("autocloak") === "true" &&
 		!navigator.userAgent.includes("Firefox")
 	) {
 		autocloak();
