@@ -12,7 +12,7 @@ export async function likeHandler(req, res) {
     const userId = req.session?.user?.id || null;
 
     if (!userId) {
-      return res.status(401).json({ error: 'Must be logged in to like' });
+      return res.status(401).json({ error: 'You must be signed in to like' });
     }
 
     if (action === 'unlike') {
