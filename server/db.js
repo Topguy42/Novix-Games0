@@ -60,6 +60,32 @@ try {
   console.error('Migration error:', error);
 }
 
+// Migrate feedback table to allow nullable user_id
+try {
+  const feedbackTableInfo = db.prepare("PRAGMA table_info(feedback)").all();
+  const userIdColumn = feedbackTableInfo.find(col => col.name === 'user_id');
+  if (userIdColumn && userIdColumn.notnull === 1) {
+    console.log('Migrating feedback table to allow nullable user_id...');
+    db.exec(`
+      BEGIN TRANSACTION;
+      CREATE TABLE feedback_new (
+        id TEXT PRIMARY KEY,
+        user_id TEXT,
+        content TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+      INSERT INTO feedback_new SELECT * FROM feedback;
+      DROP TABLE feedback;
+      ALTER TABLE feedback_new RENAME TO feedback;
+      COMMIT;
+    `);
+    console.log('Feedback table migration completed');
+  }
+} catch (error) {
+  console.error('Feedback table migration error:', error);
+}
+
 db.exec(`
 
   CREATE TABLE IF NOT EXISTS changelog (
