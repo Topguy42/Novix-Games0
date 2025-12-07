@@ -86,6 +86,34 @@ try {
   console.error('Feedback table migration error:', error);
 }
 
+// Migrate comments table to allow nullable user_id
+try {
+  const commentsTableInfo = db.prepare("PRAGMA table_info(comments)").all();
+  const userIdColumn = commentsTableInfo.find(col => col.name === 'user_id');
+  if (userIdColumn && userIdColumn.notnull === 1) {
+    console.log('Migrating comments table to allow nullable user_id...');
+    db.exec(`
+      BEGIN TRANSACTION;
+      CREATE TABLE comments_new (
+        id TEXT PRIMARY KEY,
+        type TEXT NOT NULL,
+        target_id TEXT NOT NULL,
+        user_id TEXT,
+        content TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+      INSERT INTO comments_new SELECT * FROM comments;
+      DROP TABLE comments;
+      ALTER TABLE comments_new RENAME TO comments;
+      COMMIT;
+    `);
+    console.log('Comments table migration completed');
+  }
+} catch (error) {
+  console.error('Comments table migration error:', error);
+}
+
 db.exec(`
 
   CREATE TABLE IF NOT EXISTS changelog (
