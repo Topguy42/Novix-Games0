@@ -2,21 +2,28 @@ import db from '../db.js';
 import { randomUUID } from 'crypto';
 
 export async function likeHandler(req, res) {
-  const { type, targetId } = req.body || {};
-  
+  const { type, targetId, action } = req.body || {};
+
   if (!['changelog','feedback'].includes(type) || !targetId) {
     return res.status(400).json({ error: 'Invalid request' });
   }
 
   try {
-    const id = randomUUID();
     const userId = req.session?.user?.id || null;
-    const now = Date.now();
-    
-    db.prepare('INSERT INTO likes (id, type, target_id, user_id, created_at) VALUES (?, ?, ?, ?, ?)')
-      .run(id, type, targetId, userId, now);
-    
-    res.status(201).json({ message: 'Liked!' });
+
+    if (action === 'unlike') {
+      db.prepare('DELETE FROM likes WHERE type = ? AND target_id = ? AND user_id = ?')
+        .run(type, targetId, userId);
+      res.json({ message: 'Unliked.' });
+    } else {
+      const id = randomUUID();
+      const now = Date.now();
+
+      db.prepare('INSERT INTO likes (id, type, target_id, user_id, created_at) VALUES (?, ?, ?, ?, ?)')
+        .run(id, type, targetId, userId, now);
+
+      res.status(201).json({ message: 'Liked!' });
+    }
   } catch (error) {
     if (error.message && error.message.includes('UNIQUE')) {
       try {
