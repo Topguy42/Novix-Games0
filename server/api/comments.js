@@ -1,19 +1,29 @@
-// filepath: server/api/comments.js
 import db from '../db.js';
 import { randomUUID } from 'crypto';
 
 export async function addCommentHandler(req, res) {
-  if (!req.session.user) return res.status(401).json({ error: 'Unauthorized' });
-  const { type, targetId, content } = req.body;
-  if (!['changelog','feedback'].includes(type) || !targetId || !content) return res.status(400).json({ error: 'Invalid request' });
-  // no bad words >:(
+  const { type, targetId, content } = req.body || {};
+  
+  if (!['changelog','feedback'].includes(type) || !targetId || !content) {
+    return res.status(400).json({ error: 'Invalid request' });
+  }
+  
   const banned = [/\bnigg\w*\b/i, /\bcunt\b/i, /\bchink\b/i, /\bfag\w*\b/i, /\btrann\w*\b/i, /\bspic\b/i, /\bslut\b/i, /\bwhore\b/i, /\bretard\b/i];
-  if (banned.some(r => r.test(content))) return res.status(400).json({ error: 'Inappropriate language detected.' });
-  const id = randomUUID();
-  const now = Date.now();
-  db.prepare('INSERT INTO comments (id, type, target_id, user_id, content, created_at) VALUES (?, ?, ?, ?, ?, ?)')
-    .run(id, type, targetId, req.session.user.id, content, now);
-  res.json({ message: 'Comment posted.' });
+  if (banned.some(r => r.test(content))) {
+    return res.status(400).json({ error: 'Inappropriate language detected.' });
+  }
+  
+  try {
+    const id = randomUUID();
+    const userId = req.session?.user?.id || null;
+    const now = Date.now();
+    db.prepare('INSERT INTO comments (id, type, target_id, user_id, content, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(id, type, targetId, userId, content, now);
+    res.status(201).json({ message: 'Comment posted.', id });
+  } catch (error) {
+    console.error('Comment error:', error);
+    res.status(500).json({ error: 'Failed to post comment' });
+  }
 }
 
 export async function getCommentsHandler(req, res) {
