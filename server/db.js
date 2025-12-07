@@ -161,9 +161,9 @@ db.exec(`
 
   CREATE TABLE IF NOT EXISTS likes (
     id TEXT PRIMARY KEY,
-    type TEXT NOT NULL, -- 'changelog' or 'feedback'
+    type TEXT NOT NULL,
     target_id TEXT NOT NULL,
-    user_id TEXT NOT NULL,
+    user_id TEXT,
     created_at INTEGER NOT NULL,
     UNIQUE(type, target_id, user_id),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
