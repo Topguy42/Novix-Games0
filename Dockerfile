@@ -1,6 +1,9 @@
 # ---------- Build Stage ----------
 FROM node:22-alpine AS builder
 
+# Install build dependencies for native modules
+RUN apk add --no-cache python3 make g++
+
 # Set working directory
 WORKDIR /usr/src/app
 
